@@ -36,12 +36,19 @@ static void mykmod_vm_close(struct vm_area_struct *vma);
 //static int mykmod_vm_fault(struct vm_fault *vmf);
 static int mykmod_vm_fault(struct vm_area_struct *vma, struct vm_fault *vmf);
 
-// TODO Data-structure to keep per device info 
+// TODO Data-structure to keep per device info --------DONE
+struct mykmod_dev_info {
+	char *dev_info;
+	size_t size;
+	int npagefaults	;
+};
+// TODO Device table data-structure to keep all devicesc
 
-// TODO Device table data-structure to keep all devices
+struct mykmod_dev_info *devices[MYKMOD_MAX_DEVS];
 
 
 // TODO Data-structure to keep per VMA info 
+//
 
 static const struct vm_operations_struct mykmod_vm_ops = {
 	.open  = mykmod_vm_open,
@@ -72,8 +79,10 @@ static void mykmod_cleanup_module(void)
 {
 	printk("mykmod unloaded\n");
 	unregister_chrdev(mykmod_major,"mykmod");
-	// TODO free device info structures from device table
-
+	// TODO free device info structures from device table---------DONE
+	for(int i = 0; i < MYKMOD_MAX_DEVS; i++)
+		if(devices[i] != NULL)
+			kmfree(devices[i]);
 	return;
 }
 
@@ -85,19 +94,28 @@ mykmod_open(struct inode *inodep, struct file *filep)
 		filep, filep->private_data,
 		inodep, inodep->i_private, inodep->i_rdev, MAJOR(inodep->i_rdev), MINOR(inodep->i_rdev));
 
-	// TODO: Allocate memory for devinfo and store in device table and i_private.
+	// TODO: Allocate memory for devinfo and store in device table and i_private.--------DONE
 	if (inodep->i_private == NULL) {
+		struct mykmod_dev_info *info;
+		info = kmalloc(sizeof(struct mykmod_dev_info), GFP_KERNEL);
+		info->dev_info = (char *) kzalloc(MYDEV_LEN, GFP_KERNEL);
+		info->size = MYDEV_LEN;
+		info->npagefaults = 0;
+		inodep->i_private = info;
 	}
 
 	// Store device info in file's private_data aswell
 	filep->private_data = inodep->i_private;
 
+	// Update devices table
+	devices[MINOR(inodep->i_rdev)] = info;
 	return 0;
 }
 
 static int
 mykmod_close(struct inode *inodep, struct file *filep)
 {
+	devices[MINOR(inodep->i_rdev)] = NULL;
 	// TODO: Release memory allocated for data-structures.
 	printk("mykmod_close: inodep=%p filep=%p\n", inodep, filep);
 	return 0;
@@ -107,23 +125,29 @@ static int mykmod_mmap(struct file *filp, struct vm_area_struct *vma)
 {
 	printk("mykmod_mmap: filp=%p vma=%p flags=%lx\n", filp, vma, vma->vm_flags);
 
-	//TODO setup vma's flags, save private data (devinfo, npagefaults) in vm_private_data
+	//TODO setup vma's flags, save private data (devinfo, npagefaults) in vm_private_data-----------DONE
+	vma -> vm_ops = &mykmod_vm_ops;
+	vma -> vm_flags  |= VM_DONTEXPAND | VM_DONTDUMP;
+
+	vma->vm_private_data = filp ->private_data;
+
 	mykmod_vm_open(vma);
 
-	return -ENOSYS; // Remove this once mmap is implemented.
+	//return -ENOSYS; // Remove this once mmap is implemented.
 	return 0;
 }
 
 static void
 mykmod_vm_open(struct vm_area_struct *vma)
 {
-	//printk("mykmod_vm_open: vma=%p npagefaults:%lu\n", vma, ?);
+	
+	printk("mykmod_vm_open: vma=%p npagefaults:%lu\n", vma, vma -> vm_private_data -> npagefaults);
 }
 
 static void
 mykmod_vm_close(struct vm_area_struct *vma)
 {
-	//printk("mykmod_vm_close: vma=%p npagefaults:%lu\n", vma, ?);
+	printk("mykmod_vm_close: vma=%p npagefaults:%lu\n", vma, vma -> vm_private_data-> npagefaults);
 }
 
 static int
