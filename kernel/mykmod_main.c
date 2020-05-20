@@ -45,7 +45,7 @@ struct mykmod_dev_info {
 // TODO Device table data-structure to keep all devicesc
 
 struct mykmod_dev_info *devices[MYKMOD_MAX_DEVS];
-
+int no_of_devices = 0;
 
 // TODO Data-structure to keep per VMA info 
 //
@@ -80,9 +80,8 @@ static void mykmod_cleanup_module(void)
 	printk("mykmod unloaded\n");
 	unregister_chrdev(mykmod_major,"mykmod");
 	// TODO free device info structures from device table---------DONE
-	for(int i = 0; i < MYKMOD_MAX_DEVS; i++)
-		if(devices[i] != NULL)
-			kmfree(devices[i]);
+	for(int i = 0; i < no_of_devices; i++)
+		kmfree(devices[i]);
 	return;
 }
 
@@ -102,20 +101,30 @@ mykmod_open(struct inode *inodep, struct file *filep)
 		info->size = MYDEV_LEN;
 		info->npagefaults = 0;
 		inodep->i_private = info;
+
+		// Update devices table
+		devices[no_of_devices++] = info;
 	}
 
 	// Store device info in file's private_data aswell
 	filep->private_data = inodep->i_private;
 
-	// Update devices table
-	devices[MINOR(inodep->i_rdev)] = info;
 	return 0;
 }
 
 static int
 mykmod_close(struct inode *inodep, struct file *filep)
 {
-	devices[MINOR(inodep->i_rdev)] = NULL;
+	//devices[MINOR(inodep->i_rdev)] = NULL;
+	// device driver loaded
+	// creating new device /tmp/a 3, open() -> kmalloc()... devices[0]
+	// mmap writing
+	// close
+	// open
+	// read
+
+	// deleting that devide 3
+	// creating new device /tmp/b 3, open() -> kmalloc() .... devices[1]
 	// TODO: Release memory allocated for data-structures.
 	printk("mykmod_close: inodep=%p filep=%p\n", inodep, filep);
 	return 0;
@@ -153,7 +162,17 @@ mykmod_vm_close(struct vm_area_struct *vma)
 static int
 mykmod_vm_fault(struct vm_area_struct *vma, struct vm_fault *vmf)
 {
-	//printk("mykmod_vm_fault: vma=%p vmf=%p pgoff=%lu page=%p\n", vma, vmf, vmf->pgoff, vmf->page);
+	printk("mykmod_vm_fault: vma=%p vmf=%p pgoff=%lu page=%p\n", vma, vmf, vmf->pgoff, vmf->page);
+	unsigned long offset = vmf->pgoff << PAGE_SHIFT;
+	unsigned long physaddr = virt_to_phys(vma->vm_private_data->dev_info) + offset;
+	unsigned long pfn = physaddr >> PAGE_SHIFT;
+	
+	// ((pgoff) + (virt_to_phys(data)) >> PAGE_SHIFT)
+	vmf->page(pfn_to_page(pfn));
+	get_page(vmf->page);
+	
+
+	vma->vm_private_data->npagefaults++;
 	// TODO: build virt->phys mappings
 
 	return 0;
