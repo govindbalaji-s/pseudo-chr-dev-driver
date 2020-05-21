@@ -40,7 +40,7 @@ int dev_oflag = 0;
 
 char *msg = NULL;
 int msg_len = 0;
-int msg_buf_len = 0;
+#define MSG_BUF_LEN 1024;
 
 int main(int argc, char *argv[])
 {
@@ -88,9 +88,9 @@ int main(int argc, char *argv[])
 				}
 
 				if (strcmp("demand", optarg) == 0) {
-					//TODO mmap_flags = ??;
+					 mmap_flags = MAP_SHARED;
 				} else if (strcmp("prefetch", optarg) == 0) {
-					//TODO mmap_flags = ??
+					mmap_flags = MAP_POPULATE | MAP_SHARED;
 				} else {
 					cerr << "Invalid operation: " << optarg << "\n";
 					print_help(argv[0], -1);
@@ -140,7 +140,10 @@ int main(int argc, char *argv[])
 		print_help(argv[0], -1);
 	} else if (optind < argc - 1) {
 		cerr <<  "Too many arguments\n";
-		print_help(argv[0], -1);
+		print_help(argv[0], -1);if(device_mem == MAP_FAILED) {
+					perror("mmap failed.\n");
+					exit(-3);
+				}
 	}
 	dev_file = argv[optind];
 
@@ -173,14 +176,29 @@ int main(int argc, char *argv[])
 
 			case OP_MAPREAD: {
 				off_t off = 0;
-				size_t len;
+				size_t len = MYDEV_LEN;
 				// memory map the devicemem's kernel buffer into user-space segment.
 				// TODO
-
+				char *device_mem;
+				device_mem = mmap(NULL, len, PROT_READ, mmap_flags, dev_fd, off);
+				if(device_mem == MAP_FAILED) {
+					perror("mmap failed.\n");
+					exit(-3);
+				}
+				// Assumed that max msg_len is MSG_BUF_LEN
+				char msg_buf[MSG_BUF_LEN];
+				for(int i = len-1; i >= 0; i--)
+					msg_buf[i % MSG_BUF_LEN] = device_mem[i];
+					
 				// Compare the data read from devicemem with msg
 				// DONOT define an array of MYDEV_LEN. Seriously! Dont need array of MYDEV_LEN size.
 				// TODO. Hint use loop & modulus operator on msg to compare the string with entire device_mem
-			
+				if(msg_len != 0 && msg != NULL) {
+					if(memcmp(msg_buf, msg, msg_len) != 0) {
+						cerr << "Comparison failed\n";
+						exit(1);
+					}
+				}
 				// unmap the devicemem's kernel buffer.
 				// TODO
 
@@ -189,7 +207,17 @@ int main(int argc, char *argv[])
 
 			case OP_MAPWRITE: {
 				off_t off = 0;
-				size_t len;
+				size_t len = msg_len;
+				
+				char *device_mem;
+	
+				device_mem = mmap(NULL,len, PROT_WRITE, mmap_flags, dev_fd, off);
+				if(device_mem == MAP_FAILED) {
+					perror("mmap failed.\n");
+					exit(-3);
+				}
+				
+				memcpy(device_mem, msg, msg_len+1);
 				// memory map the devicemem's kernel buffer into user-space segment.
 				// TODO
 
