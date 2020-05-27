@@ -25,9 +25,9 @@ module_init(mykmod_init_module);
 module_exit(mykmod_cleanup_module);
 
 static struct file_operations mykmod_fops = {
-	.owner = THIS_MODULE,	/* owner (struct module *) */
-	.open = mykmod_open,	/* open */
-	.release = mykmod_close,	/* release */
+	.owner  = THIS_MODULE,	/* owner (struct module *) */
+	.open   = mykmod_open,	/* open */
+	.release  = mykmod_close,     /* release */
 	.mmap = mykmod_mmap,	/* mmap */
 };
 
@@ -52,10 +52,10 @@ struct mykmod_vma_info {
 	struct mykmod_dev_info *dev_info;
 	unsigned long npagefaults;
 };
-struct mykmod_vma_info *vma_info[4 * MYKMOD_MAX_DEVS];
+struct mykmod_vma_info *vma_info[4*MYKMOD_MAX_DEVS];
 //
 static const struct vm_operations_struct mykmod_vm_ops = {
-	.open = mykmod_vm_open,
+	.open  = mykmod_vm_open,
 	.close = mykmod_vm_close,
 	.fault = mykmod_vm_fault
 };
@@ -67,11 +67,11 @@ static int mykmod_init_module(void)
 	printk("mykmod loaded\n");
 	printk("mykmod initialized at=%p\n", init_module);
 
-	if ((mykmod_major =
-	     register_chrdev(MYKMOD_DEV_MAJOR, "mykmod", &mykmod_fops)) < 0) {
+	if ((mykmod_major = register_chrdev(MYKMOD_DEV_MAJOR,"mykmod",&mykmod_fops))<0) {
 		printk(KERN_WARNING "Failed to register character device\n");
 		return 1;
-	} else {
+	}
+	else {
 		printk("register character device %d\n", mykmod_major);
 	}
 	// TODO initialize device table
@@ -83,41 +83,43 @@ static void mykmod_cleanup_module(void)
 {
 	int i;
 	printk("mykmod unloaded\n");
-	unregister_chrdev(mykmod_major, "mykmod");
+	unregister_chrdev(mykmod_major,"mykmod");
 	// TODO free device info structures from device table---------DONE
-	for (i = 0; i < no_of_devices; i++)
+	for(i = 0; i < no_of_devices; i++)
 		kfree(devices[i]);
-	for (i = 0; i < no_of_vmas; i++)
+	for(i = 0; i < no_of_vmas; i++)
 		kfree(vma_info[i]);
 	return;
 }
 
-static int mykmod_open(struct inode *inodep, struct file *filep)
+static int
+mykmod_open(struct inode *inodep, struct file *filep)
 {
 	printk("mykmod_open: filep=%p f->private_data=%p "
-	       "inodep=%p i_private=%p i_rdev=%x maj:%d min:%d\n",
-	       filep, filep->private_data,
-	       inodep, inodep->i_private, inodep->i_rdev, MAJOR(inodep->i_rdev),
-	       MINOR(inodep->i_rdev));
+		"inodep=%p i_private=%p i_rdev=%x maj:%d min:%d\n",
+		filep, filep->private_data,
+		inodep, inodep->i_private, inodep->i_rdev, MAJOR(inodep->i_rdev), MINOR(inodep->i_rdev));
 
 	// TODO: Allocate memory for devinfo and store in device table and i_private.--------DONE
 	if (inodep->i_private == NULL) {
 		struct mykmod_dev_info *info;
 		info = kmalloc(sizeof(struct mykmod_dev_info), GFP_KERNEL);
-		info->data = (char *)kzalloc(MYDEV_LEN, GFP_KERNEL);
+		info->data = (char *) kzalloc(MYDEV_LEN, GFP_KERNEL);
 		info->size = MYDEV_LEN;
 		inodep->i_private = info;
 
 		// Update devices table
 		devices[no_of_devices++] = info;
 	}
+
 	// Store device info in file's private_data aswell
 	filep->private_data = inodep->i_private;
 
 	return 0;
 }
 
-static int mykmod_close(struct inode *inodep, struct file *filep)
+static int
+mykmod_close(struct inode *inodep, struct file *filep)
 {
 	// TODO: Release memory allocated for data-structures.
 	printk("mykmod_close: inodep=%p filep=%p\n", inodep, filep);
@@ -127,12 +129,11 @@ static int mykmod_close(struct inode *inodep, struct file *filep)
 static int mykmod_mmap(struct file *filp, struct vm_area_struct *vma)
 {
 	struct mykmod_vma_info *vm_pvt_data;
-	printk("mykmod_mmap: filp=%p vma=%p flags=%lx\n", filp, vma,
-	       vma->vm_flags);
+	printk("mykmod_mmap: filp=%p vma=%p flags=%lx\n", filp, vma, vma->vm_flags);
 
 	//TODO setup vma's flags, save private data (devinfo, npagefaults) in vm_private_data-----------DONE
-	vma->vm_ops = &mykmod_vm_ops;
-	vma->vm_flags |= VM_DONTEXPAND | VM_DONTDUMP;
+	vma -> vm_ops = &mykmod_vm_ops;
+	vma -> vm_flags  |= VM_DONTEXPAND | VM_DONTDUMP;
 
 	vm_pvt_data = kmalloc(sizeof(struct mykmod_vma_info), GFP_KERNEL);
 	vm_pvt_data->dev_info = filp->private_data;
@@ -147,38 +148,43 @@ static int mykmod_mmap(struct file *filp, struct vm_area_struct *vma)
 	return 0;
 }
 
-static void mykmod_vm_open(struct vm_area_struct *vma)
+static void
+mykmod_vm_open(struct vm_area_struct *vma)
 {
 	struct mykmod_vma_info *vm_pvt_info = vma->vm_private_data;
 	printk("mykmod_vm_open: vma=%p npagefaults:%lu\n", vma,
-	       vm_pvt_info->npagefaults);
+			 vm_pvt_info -> npagefaults);
 }
 
-static void mykmod_vm_close(struct vm_area_struct *vma)
+static void
+mykmod_vm_close(struct vm_area_struct *vma)
 {
 	struct mykmod_vma_info *vm_pvt_info = vma->vm_private_data;
 	printk("mykmod_vm_close: vma=%p npagefaults:%lu\n", vma,
-	       vm_pvt_info->npagefaults);
+			vm_pvt_info -> npagefaults);
 	vm_pvt_info->npagefaults = 0;
 }
 
-static int mykmod_vm_fault(struct vm_area_struct *vma, struct vm_fault *vmf)
+static int
+mykmod_vm_fault(struct vm_area_struct *vma, struct vm_fault *vmf)
 {
 	struct mykmod_vma_info *vma_prvt_data = vma->vm_private_data;
 	struct mykmod_dev_info *filp_pvt_data = vma_prvt_data->dev_info;
-	char *dev_data = filp_pvt_data->data;
+	char * dev_data = filp_pvt_data->data;
 	unsigned long offset = vmf->pgoff << PAGE_SHIFT;
 	unsigned long physaddr = virt_to_phys(dev_data) + offset;
 	unsigned long pfn = physaddr >> PAGE_SHIFT;
-	printk("mykmod_vm_fault: vma=%p vmf=%p pgoff=%lu page=%p\n", vma, vmf,
-	       vmf->pgoff, vmf->page);
+	printk("mykmod_vm_fault: vma=%p vmf=%p pgoff=%lu page=%p\n", vma, vmf, vmf->pgoff, vmf->page);
 
 	// ((pgoff) + (virt_to_phys(data)) >> PAGE_SHIFT)
 	vmf->page = pfn_to_page(pfn);
 	get_page(vmf->page);
+	
 
 	vma_prvt_data->npagefaults++;
 	// TODO: build virt->phys mappings
 
 	return 0;
 }
+
+
