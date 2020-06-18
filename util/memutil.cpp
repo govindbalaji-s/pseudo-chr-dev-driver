@@ -40,7 +40,6 @@ int dev_oflag = 0;
 
 char *msg = NULL;
 int msg_len = 0;
-#define MSG_BUF_LEN 1024
 
 int main(int argc, char *argv[])
 {
@@ -190,27 +189,28 @@ int main(int argc, char *argv[])
 					perror("mmap failed.\n");
 					exit(-3);
 				}
-				// Assumed that max msg_len is MSG_BUF_LEN
-				char msg_buf[MSG_BUF_LEN];
-				for (int i = len - 1; i >= 0; i--)
-					msg_buf[i % MSG_BUF_LEN] =
-					    device_mem[i];
 
+				if(msg_len > 0) {
+					for (int i = 0; i < MYDEV_LEN; i++)
+					{
+						if(msg[i%msg_len] != device_mem[i]){
+							cerr << "Comparison failed\n";
+							exit(1);
+						}
+						cout << device_mem[i];
+					}
+				}
+				
+				
 				// Compare the data read from devicemem with msg
 				// DONOT define an array of MYDEV_LEN. Seriously! Dont need array of MYDEV_LEN size.
 				// TODO. Hint use loop & modulus operator on msg to compare the string with entire device_mem
-				if (msg_len != 0 && msg != NULL) {
-					if (memcmp(msg_buf, msg, msg_len) != 0) {
-						cerr << "Comparison failed\n";
-						exit(1);
-					}
-				}
+				
 				// unmap the devicemem's kernel buffer.
 				// TODO
 				if (munmap(device_mem, len) != 0) {
-					cerr << "munmap failed. errno:" << errno
-					    << '\n';
-					exit(2);
+					perror("munmap failed.\n");
+					exit(-2);
 				}
 
 				break;
@@ -218,8 +218,7 @@ int main(int argc, char *argv[])
 
 		case OP_MAPWRITE:{
 				off_t off = 0;
-				size_t len = msg_len;
-
+				size_t len = MYDEV_LEN;
 				char *device_mem;
 
 				device_mem =
@@ -230,7 +229,9 @@ int main(int argc, char *argv[])
 					exit(-3);
 				}
 
-				memcpy(device_mem, msg, msg_len + 1);
+				if(msg_len > 0)
+					for(int i = 0; i < MYDEV_LEN; i++)
+						device_mem[i] = msg[i%msg_len];
 				// memory map the devicemem's kernel buffer into user-space segment.
 				// TODO
 
@@ -241,9 +242,8 @@ int main(int argc, char *argv[])
 				// unmap the devicemem's kernel buffer.
 				// TODO
 				if (munmap(device_mem, len) != 0) {
-					cerr << "munmap failed. errno:" << errno
-					    << '\n';
-					exit(2);
+					perror("munmap failed.\n");
+					exit(-2);
 				}
 
 				break;

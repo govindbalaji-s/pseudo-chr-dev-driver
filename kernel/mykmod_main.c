@@ -36,23 +36,26 @@ static void mykmod_vm_close(struct vm_area_struct *vma);
 //static int mykmod_vm_fault(struct vm_fault *vmf);
 static int mykmod_vm_fault(struct vm_area_struct *vma, struct vm_fault *vmf);
 
-// TODO Data-structure to keep per device info --------DONE
+// TODO Data-structure to keep per device(per inode) info 
 struct mykmod_dev_info {
-	char *data;
+	char *data;		// 1 MB memory
 	size_t size;
 };
-// TODO Device table data-structure to keep all devicesc
 
+// TODO Device table data-structure to keep all devices
 struct mykmod_dev_info *devices[MYKMOD_MAX_DEVS];
 int no_of_devices = 0;
-int no_of_vmas = 0;
 
 // TODO Data-structure to keep per VMA info 
 struct mykmod_vma_info {
-	struct mykmod_dev_info *dev_info;
-	unsigned long npagefaults;
+	struct mykmod_dev_info *dev_info;	// the underlying device info
+	unsigned long npagefaults;			// number of page faults in this VMA
 };
+
+// Assumed maximum number of times mmap() called  = 4 * MYKMOD_MAX_DEVS
 struct mykmod_vma_info *vma_info[4 * MYKMOD_MAX_DEVS];
+int no_of_vmas = 0;
+
 //
 static const struct vm_operations_struct mykmod_vm_ops = {
 	.open = mykmod_vm_open,
@@ -84,7 +87,7 @@ static void mykmod_cleanup_module(void)
 	int i;
 	printk("mykmod unloaded\n");
 	unregister_chrdev(mykmod_major, "mykmod");
-	// TODO free device info structures from device table---------DONE
+	// TODO free device info structures from device.
 	for (i = 0; i < no_of_devices; i++)
 		kfree(devices[i]);
 	for (i = 0; i < no_of_vmas; i++)
@@ -94,13 +97,8 @@ static void mykmod_cleanup_module(void)
 
 static int mykmod_open(struct inode *inodep, struct file *filep)
 {
-	printk("mykmod_open: filep=%p f->private_data=%p "
-	       "inodep=%p i_private=%p i_rdev=%x maj:%d min:%d\n",
-	       filep, filep->private_data,
-	       inodep, inodep->i_private, inodep->i_rdev, MAJOR(inodep->i_rdev),
-	       MINOR(inodep->i_rdev));
-
-	// TODO: Allocate memory for devinfo and store in device table and i_private.--------DONE
+	// TODO: Allocate memory for devinfo and store in device table and i_private.
+	// When the inode is opened for the first time, allocate 1MB kernel memory for the device
 	if (inodep->i_private == NULL) {
 		struct mykmod_dev_info *info;
 		info = kmalloc(sizeof(struct mykmod_dev_info), GFP_KERNEL);
@@ -111,9 +109,15 @@ static int mykmod_open(struct inode *inodep, struct file *filep)
 		// Update devices table
 		devices[no_of_devices++] = info;
 	}
-	// Store device info in file's private_data aswell
+	// Store device info in file's private_data as well
 	filep->private_data = inodep->i_private;
 
+	printk("mykmod_open: filep=%p f->private_data=%p "
+	       "inodep=%p i_private=%p i_rdev=%x maj:%d min:%d\n",
+	       filep, filep->private_data,
+	       inodep, inodep->i_private, inodep->i_rdev, MAJOR(inodep->i_rdev),
+	       MINOR(inodep->i_rdev));
+		   
 	return 0;
 }
 
@@ -127,23 +131,28 @@ static int mykmod_close(struct inode *inodep, struct file *filep)
 static int mykmod_mmap(struct file *filp, struct vm_area_struct *vma)
 {
 	struct mykmod_vma_info *vm_pvt_data;
-	printk("mykmod_mmap: filp=%p vma=%p flags=%lx\n", filp, vma,
-	       vma->vm_flags);
-
+	// Check if VMA would lie inside the file completely
+	if((vma->vm_pgoff << PAGE_SHIFT) + vma->vm_end - vma->vm_start > MYDEV_LEN){
+		printk("mykmod_mmap: Trying to mmap out of file bounds");
+		return -1;
+	}
 	//TODO setup vma's flags, save private data (devinfo, npagefaults) in vm_private_data-----------DONE
 	vma->vm_ops = &mykmod_vm_ops;
 	vma->vm_flags |= VM_DONTEXPAND | VM_DONTDUMP;
 
+	printk("mykmod_mmap: filp=%p vma=%p flags=%lx\n", filp, vma,
+	       vma->vm_flags);
+
+	// Allocate per VMA info, and initialize page faults to 0.
 	vm_pvt_data = kmalloc(sizeof(struct mykmod_vma_info), GFP_KERNEL);
 	vm_pvt_data->dev_info = filp->private_data;
 	vm_pvt_data->npagefaults = 0;
 	vma->vm_private_data = vm_pvt_data;
 
+	// Update vmas table
 	vma_info[no_of_vmas++] = vma->vm_private_data;
 
 	mykmod_vm_open(vma);
-
-	//return -ENOSYS; // Remove this once mmap is implemented.
 	return 0;
 }
 
@@ -167,18 +176,30 @@ static int mykmod_vm_fault(struct vm_area_struct *vma, struct vm_fault *vmf)
 	struct mykmod_vma_info *vma_prvt_data = vma->vm_private_data;
 	struct mykmod_dev_info *filp_pvt_data = vma_prvt_data->dev_info;
 	char *dev_data = filp_pvt_data->data;
+
+	// TODO: build virt->phys mappings
+	// Get page offset and convert it to address offset
 	unsigned long offset = vmf->pgoff << PAGE_SHIFT;
+	// Get the physical address, and the physical page frame number(pfn)
 	unsigned long physaddr = virt_to_phys(dev_data) + offset;
 	unsigned long pfn = physaddr >> PAGE_SHIFT;
-	printk("mykmod_vm_fault: vma=%p vmf=%p pgoff=%lu page=%p\n", vma, vmf,
-	       vmf->pgoff, vmf->page);
 
-	// ((pgoff) + (virt_to_phys(data)) >> PAGE_SHIFT)
+	if (!pfn_valid(pfn)) {
+			vmf->page = NULL;
+			return 1;
+	}
+
+
+	// Convert the page frame to struct page and store it in vmf
 	vmf->page = pfn_to_page(pfn);
+	// Keeps the reference count of mapped pages
 	get_page(vmf->page);
 
+	// Increment number of page faults
 	vma_prvt_data->npagefaults++;
-	// TODO: build virt->phys mappings
 
+	printk("mykmod_vm_fault: vma=%p vmf=%p pgoff=%lu page=%p\n", vma, vmf,
+	       vmf->pgoff, vmf->page);
 	return 0;
 }
+
