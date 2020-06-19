@@ -196,8 +196,7 @@ int main(int argc, char *argv[])
 						if(msg[i%msg_len] != device_mem[i]){
 							cerr << "Comparison failed\n";
 							exit(1);
-						}
-						cout << device_mem[i];
+						}				
 					}
 				}
 				

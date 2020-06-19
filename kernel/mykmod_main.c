@@ -132,11 +132,14 @@ static int mykmod_mmap(struct file *filp, struct vm_area_struct *vma)
 {
 	struct mykmod_vma_info *vm_pvt_data;
 	// Check if VMA would lie inside the file completely
-	if((vma->vm_pgoff << PAGE_SHIFT) + vma->vm_end - vma->vm_start > MYDEV_LEN){
+	struct mykmod_dev_info *dev_info = filp->private_data;
+	printk("%lu %p %lu %p",vma->vm_start , dev_info->data , vma->vm_end ,dev_info->data + MYDEV_LEN );
+	if((vma->vm_pgoff<<PAGE_SHIFT)+(vma->vm_end - vma->vm_start) > MYDEV_LEN) {
+	//if(vma->vm_start < dev_info->data || vma->vm_end > dev_info->data + MYDEV_LEN){
 		printk("mykmod_mmap: Trying to mmap out of file bounds");
-		return -1;
+		return -EINVAL;
 	}
-	//TODO setup vma's flags, save private data (devinfo, npagefaults) in vm_private_data-----------DONE
+	//TODO setup vma's flags, save private data (devinfo, npagefaults) in vm_private_data
 	vma->vm_ops = &mykmod_vm_ops;
 	vma->vm_flags |= VM_DONTEXPAND | VM_DONTDUMP;
 
@@ -179,7 +182,7 @@ static int mykmod_vm_fault(struct vm_area_struct *vma, struct vm_fault *vmf)
 
 	// TODO: build virt->phys mappings
 	// Get page offset and convert it to address offset
-	unsigned long offset = vmf->pgoff << PAGE_SHIFT;
+	unsigned long offset = (vma->vm_pgoff + vmf->pgoff) << PAGE_SHIFT;
 	// Get the physical address, and the physical page frame number(pfn)
 	unsigned long physaddr = virt_to_phys(dev_data) + offset;
 	unsigned long pfn = physaddr >> PAGE_SHIFT;
