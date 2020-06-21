@@ -52,10 +52,6 @@ struct mykmod_vma_info {
 	unsigned long npagefaults;	// number of page faults in this VMA
 };
 
-// Assumed maximum number of times mmap() called  = 4 * MYKMOD_MAX_DEVS
-static struct mykmod_vma_info *vma_info[4 * MYKMOD_MAX_DEVS];
-static int no_of_vmas = 0;
-
 
 static const struct vm_operations_struct mykmod_vm_ops = {
 	.open = mykmod_vm_open,
@@ -91,8 +87,6 @@ static void mykmod_cleanup_module(void)
 		kfree(devices[i]->data);
 		kfree(devices[i]);
 	}
-	for (i = 0; i < no_of_vmas; i++)
-		kfree(vma_info[i]);
 	return;
 }
 
@@ -150,9 +144,6 @@ static int mykmod_mmap(struct file *filp, struct vm_area_struct *vma)
 	vm_pvt_data->npagefaults = 0;
 	vma->vm_private_data = vm_pvt_data;
 
-	// Update vmas table
-	vma_info[no_of_vmas++] = vma->vm_private_data;
-
 	mykmod_vm_open(vma);
 	return 0;
 }
@@ -170,6 +161,8 @@ static void mykmod_vm_close(struct vm_area_struct *vma)
 	printk("mykmod_vm_close: vma=%p npagefaults:%lu\n", vma,
 	       vm_pvt_info->npagefaults);
 	vm_pvt_info->npagefaults = 0;
+	// Free the vma info data structure
+	kfree(vm_pvt_info);
 }
 
 static int mykmod_vm_fault(struct vm_area_struct *vma, struct vm_fault *vmf)
