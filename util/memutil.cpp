@@ -143,10 +143,6 @@ int main(int argc, char *argv[])
 	} else if (optind < argc - 1) {
 		cerr << "Too many arguments\n";
 		print_help(argv[0], -1);
-		if (device_mem == MAP_FAILED) {
-			perror("mmap failed.\n");
-			exit(-3);
-		}
 	}
 	dev_file = argv[optind];
 
@@ -179,8 +175,8 @@ int main(int argc, char *argv[])
 		case OP_MAPREAD:{
 				off_t off = 0;
 				size_t len = MYDEV_LEN;
+				
 				// memory map the devicemem's kernel buffer into user-space segment.
-				// TODO
 				char *device_mem;
 				device_mem =
 				    (char *)mmap(NULL, len, PROT_READ,
@@ -190,23 +186,22 @@ int main(int argc, char *argv[])
 					exit(-3);
 				}
 
-				if(msg_len > 0) {
-					for (int i = 0; i < MYDEV_LEN; i++)
-					{
-						if(msg[i%msg_len] != device_mem[i]){
-							cerr << "Comparison failed\n";
-							exit(1);
-						}				
-					}
-				}
-				
-				
 				// Compare the data read from devicemem with msg
-				// DONOT define an array of MYDEV_LEN. Seriously! Dont need array of MYDEV_LEN size.
-				// TODO. Hint use loop & modulus operator on msg to compare the string with entire device_mem
-				
+				for (int i = 0; i < MYDEV_LEN; i++)
+				{
+					if(msg_len == 0) {
+						// To prevent compiler optimization and read the entire device.
+						char c = device_mem[i];
+					}
+						
+					else if(msg_len != 0 && msg[i%msg_len] != device_mem[i]){
+						cerr << "Comparison failed\n";
+						ret = EXIT_FAILURE;
+						break;
+					}				
+				}
+								
 				// unmap the devicemem's kernel buffer.
-				// TODO
 				if (munmap(device_mem, len) != 0) {
 					perror("munmap failed.\n");
 					exit(-2);
@@ -220,6 +215,7 @@ int main(int argc, char *argv[])
 				size_t len = MYDEV_LEN;
 				char *device_mem;
 
+				// memory map the devicemem's kernel buffer into user-space segment.
 				device_mem =
 				    (char *)mmap(NULL, len, PROT_WRITE,
 						 mmap_flags, dev_fd, off);
@@ -228,18 +224,13 @@ int main(int argc, char *argv[])
 					exit(-3);
 				}
 
+				// Write the message to devicemem from msg.
 				if(msg_len > 0)
 					for(int i = 0; i < MYDEV_LEN; i++)
 						device_mem[i] = msg[i%msg_len];
-				// memory map the devicemem's kernel buffer into user-space segment.
-				// TODO
-
-				// Write the message to devicemem from msg.
-				// DONOT define an array of MYDEV_LEN. Seriously! Dont need array of MYDEV_LEN size.
-				// TODO. Hint use loop & modulus operator on msg to copy the string to entire device_mem
+				
 
 				// unmap the devicemem's kernel buffer.
-				// TODO
 				if (munmap(device_mem, len) != 0) {
 					perror("munmap failed.\n");
 					exit(-2);
