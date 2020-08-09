@@ -1,2 +1,3 @@
 # pseudo-chr-dev-driver
-Implementing mmap() for a pseudo character device driver. CS3523 Assignment
+Implementing memory mapped IO for a pseudo character device driver.
+This was done with [Havya](https://github.com/havya7) for CS3523 assignment.
