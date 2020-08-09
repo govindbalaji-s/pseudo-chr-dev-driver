@@ -52,7 +52,6 @@ struct mykmod_vma_info {
 	unsigned long npagefaults;	// number of page faults in this VMA
 };
 
-
 static const struct vm_operations_struct mykmod_vm_ops = {
 	.open = mykmod_vm_open,
 	.close = mykmod_vm_close,

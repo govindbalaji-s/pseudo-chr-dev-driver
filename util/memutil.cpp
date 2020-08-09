@@ -175,7 +175,7 @@ int main(int argc, char *argv[])
 		case OP_MAPREAD:{
 				off_t off = 0;
 				size_t len = MYDEV_LEN;
-				
+
 				// memory map the devicemem's kernel buffer into user-space segment.
 				char *device_mem;
 				device_mem =
@@ -185,22 +185,22 @@ int main(int argc, char *argv[])
 					perror("mmap failed.\n");
 					exit(-3);
 				}
-
 				// Compare the data read from devicemem with msg
-				for (int i = 0; i < MYDEV_LEN; i++)
-				{
-					if(msg_len == 0) {
+				for (int i = 0; i < MYDEV_LEN; i++) {
+					if (msg_len == 0) {
 						// To prevent compiler optimization and read the entire device.
 						char c = device_mem[i];
 					}
-						
-					else if(msg_len != 0 && msg[i%msg_len] != device_mem[i]){
+
+					else if (msg_len != 0
+						 && msg[i % msg_len] !=
+						 device_mem[i]) {
 						cerr << "Comparison failed\n";
 						ret = EXIT_FAILURE;
 						break;
-					}				
+					}
 				}
-								
+
 				// unmap the devicemem's kernel buffer.
 				if (munmap(device_mem, len) != 0) {
 					perror("munmap failed.\n");
@@ -223,12 +223,11 @@ int main(int argc, char *argv[])
 					perror("mmap failed.\n");
 					exit(-3);
 				}
-
 				// Write the message to devicemem from msg.
-				if(msg_len > 0)
-					for(int i = 0; i < MYDEV_LEN; i++)
-						device_mem[i] = msg[i%msg_len];
-				
+				if (msg_len > 0)
+					for (int i = 0; i < MYDEV_LEN; i++)
+						device_mem[i] =
+						    msg[i % msg_len];
 
 				// unmap the devicemem's kernel buffer.
 				if (munmap(device_mem, len) != 0) {
